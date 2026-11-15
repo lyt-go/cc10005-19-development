@@ -17,6 +17,11 @@ class Settings:
     )
     page_size_default: int = 20
     page_size_max: int = 200
+    # 允许在受控环境下注入批次写入失败，用于验证「解析与清洗同生共死」；
+    # 默认 0 表示不注入，只接受 fail_after / empty_xpath 两种值。
+    cleaning_failure_injection: str = field(
+        default_factory=lambda: __import__("os").environ.get("CLEANING_FAILURE_INJECTION", "")
+    )
 
 
 settings = Settings()

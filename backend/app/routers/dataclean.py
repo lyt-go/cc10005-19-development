@@ -30,6 +30,30 @@ def list_entries(
     return PageResult(items=items, total=total, page=page, size=size)
 
 
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出去噪规则清单：每条带规则版本及正则、默认值、脱敏、优先级版本。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {
+        "module": "dataclean",
+        "total": total,
+        "exported_at": __import__("datetime").datetime.now().astimezone().isoformat(timespec="seconds"),
+        "version_scheme": "<作用域>.<组件>@V<n>",
+        "items": [
+            {
+                **entry,
+                "组件版本": {
+                    "正则匹配式": entry.get("正则版本"),
+                    "默认填充值": entry.get("默认值版本"),
+                    "脱敏替换模板": entry.get("脱敏版本"),
+                    "优先级": entry.get("规则优先级版本"),
+                },
+            }
+            for entry in items
+        ],
+    }
+
+
 @router.get("/{entry_id}", response_model=dict)
 def get_entry(entry_id: int) -> dict:
     """读取单条去噪规则明细；不存在时给出可读的错误说明。"""
@@ -37,6 +61,24 @@ def get_entry(entry_id: int) -> dict:
     if entry is None:
         raise HTTPException(status_code=404, detail=f"去噪规则 {entry_id} 不存在或已归档")
     return entry
+
+
+@router.get("/{entry_id}/versions", response_model=dict)
+def version_summary(entry_id: int) -> dict:
+    """读取规则的组件版本：XPath/正则、默认填充值、脱敏替换模板、优先级各自的实际版本。"""
+    summary = service.version_summary(entry_id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail=f"去噪规则 {entry_id} 不存在或已归档")
+    return summary
+
+
+@router.patch("/{entry_id}", response_model=ActionResult)
+def update_entry(entry_id: int, payload: EntryPayload) -> ActionResult:
+    """修改去噪规则：只递增变化组件的版本，规则版本随之递增，旧批次仍指向旧版本。"""
+    entry, message = service.update_entry(entry_id, payload.values)
+    if entry is None:
+        return ActionResult(ok=False, message=message)
+    return ActionResult(ok=True, message=message, entry=entry)
 
 
 @router.post("", response_model=ActionResult)
@@ -56,10 +98,3 @@ def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出数据去噪清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "dataclean", "total": total, "items": items}

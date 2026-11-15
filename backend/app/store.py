@@ -4,7 +4,9 @@
 """
 from __future__ import annotations
 
-from typing import Any
+import copy
+from contextlib import contextmanager
+from typing import Any, Iterator
 
 from app.seed import SEED_ROWS
 
@@ -16,7 +18,8 @@ class Store:
         }
 
     def module_names(self) -> list[str]:
-        return sorted(self._tables)
+        # 下划线开头的是模块内部明细表（清洗批次的字段/记录），不进入运营概览。
+        return sorted(name for name in self._tables if not name.startswith("_"))
 
     def rows(self, module: str) -> list[dict[str, Any]]:
         return self._tables.setdefault(module, [])
@@ -26,6 +29,21 @@ class Store:
             if int(row.get("id", 0)) == entry_id:
                 return row
         return None
+
+    @contextmanager
+    def atomic(self, *modules: str) -> Iterator[None]:
+        """把多表写入当成一次事务：中途抛错时整表回滚。
+
+        清洗批次的解析字段结果和清洗结果必须同生共死，不能出现只更新一侧的字段类型；
+        因此这里保存的是写入前的整表快照，而不仅是行数。
+        """
+        snapshots = {module: copy.deepcopy(self.rows(module)) for module in modules}
+        try:
+            yield
+        except Exception:
+            for module, snapshot in snapshots.items():
+                self._tables[module] = snapshot
+            raise
 
     def overview(self) -> dict[str, object]:
         modules: list[dict[str, object]] = []

@@ -68,6 +68,18 @@ export default function ParserView() {
     void reload()
   }, [reload])
 
+  async function submitTemplate(row: Row) {
+    setErrorMessage('')
+    try {
+      const response = await request(`${ENDPOINT}/${row.id}/submit`, { method: 'POST' })
+      const payload = await response.json()
+      setErrorMessage(payload.message ?? '提交结果未知')
+      await reload()
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '提交解析模板失败')
+    }
+  }
+
   async function runAction(action: string, row: Row) {
     setErrorMessage('')
     try {
@@ -137,6 +149,9 @@ export default function ParserView() {
             <tr key={String(row.id)}>
               {columns.map((column) => <td key={column}>{row[column] ?? '—'}</td>)}
               <td className="row-actions">
+                <button className="link" type="button" onClick={() => void submitTemplate(row)}>
+                  提交并生成清洗批次
+                </button>
                 {actions.map((action) => (
                   <button key={action} className="link" type="button" onClick={() => void runAction(action, row)}>
                     {action}

@@ -68,6 +68,19 @@ export default function DatacleanView() {
     void reload()
   }, [reload])
 
+  async function loadVersions(row: Row) {
+    setErrorMessage('')
+    try {
+      const response = await request(`${ENDPOINT}/${row.id}/versions`)
+      const payload = await response.json()
+      setErrorMessage(
+        `${payload.规则版本}；正则 ${payload.正则版本}、默认值 ${payload.默认值版本}、脱敏 ${payload.脱敏版本}、优先级 ${payload.规则优先级版本}`,
+      )
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '版本信息读取失败')
+    }
+  }
+
   async function runAction(action: string, row: Row) {
     setErrorMessage('')
     try {
@@ -137,6 +150,9 @@ export default function DatacleanView() {
             <tr key={String(row.id)}>
               {columns.map((column) => <td key={column}>{row[column] ?? '—'}</td>)}
               <td className="row-actions">
+                <button className="link" type="button" onClick={() => void loadVersions(row)}>
+                  查看版本
+                </button>
                 {actions.map((action) => (
                   <button key={action} className="link" type="button" onClick={() => void runAction(action, row)}>
                     {action}

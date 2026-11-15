@@ -55,6 +55,7 @@ npm run dev
 | JS渲染采集 | `jsrender` | 渲染配置 | 配置编号、目标URL、浏览器类型 |
 | 字段解析器 | `parser` | 解析模板 | 模板编号、目标字段数、XPath表达式 |
 | 数据去噪 | `dataclean` | 去噪规则 | 规则编号、目标字段、HTML标签清理 |
+| 清洗批次 | `cleaning` | 清洗批次 | 批次编号、模板版本、去噪规则版本 |
 | 格式转换 | `formatter` | 转换器 | 转换器编号、输入格式、输出格式 |
 | 采集去重 | `dedupengine` | 去重引擎 | 引擎编号、去重字段组、哈希算法 |
 | 动态限速 | `throttle` | 限速规则 | 规则编号、目标域组、初始速率 |
@@ -77,3 +78,46 @@ npm run dev
 
 领域：数据工程
 子方向：数据采集、爬虫与RPA
+
+
+## 清洗批次与文件交付
+
+字段解析器与数据去噪各自保存生效状态，但「提交解析模板」会生成一个**清洗批次**，
+把当时的口径全部冻结，之后规则改版只影响新批次：
+
+- 冻结内容：目标字段、字段类型、XPath（含记录容器 XPath）、正则匹配式、类型转换规则、
+  默认填充值、多值分隔符，以及各组件版本和去噪规则版本。
+- 结果：`解析字段结果` 与 `清洗结果` 按 `(字段名, 记录序号)` 一一对应；
+  多值字段带分隔符版本、逐项序列与项数；空值带可解释原因（XPath 未命中 / 文本为空 / 类型转换失败 /
+  去噪后为空 / 默认填充值补齐）。
+- 冲突裁决：同一字段命中多条去噪规则时，依次按「规则优先级 → 脱敏用途 → 规则版本新旧 →
+  规则编号升序」确定唯一生效规则，并在批次里记录每条候选的裁决理由。
+- 重复提交：同一模板、同一冻结口径按指纹判重，返回已有批次，不产生重复批次。
+- 失败原子性：解析与清洗两侧先算后写，同一事务落库；任何一步失败整批回滚，
+  不会留下只更新一侧的字段类型。测试可用 `CLEANING_FAILURE_INJECTION=fail_after` 验证。
+- 默认填充值与敏感词脱敏的优先级：先执行含脱敏在内的全部去噪步骤，再应用默认填充值；
+  填充值来源优先目标字段，其次生效去噪规则。这样填充值不会被脱敏后又写回明文。
+
+接口：
+
+- `POST /api/parser/{id}/submit`：提交解析模板并生成批次（幂等）。
+- `GET /api/cleaning/batches`、`GET /api/cleaning/batches/{id}`
+- `GET /api/cleaning/batches/{id}/field-results`、`GET /api/cleaning/batches/{id}/clean-results`
+- `GET /api/cleaning/batches/{id}/verify`：核对两侧行键、多值项数与规则是否改版。
+- `GET /api/delivery/batches/{id}/export|download|package`：导出 JSON 清单、下载结果 CSV、打包 zip。
+- `GET /api/delivery/batches/{id}/manifest`：页面内直接查看交付清单。
+- `GET /api/delivery/deliveries`：交付记录，每条带批次编号、模板版本与指纹。
+
+交付物全部从批次冻结快照生成，因此导出/下载/打包里的解析模板、去噪规则、目标字段与
+当前批次结果一致；规则改版后再导出旧批次，文件仍保持旧版本口径。zip 包内包含
+`manifest.json`、`field-results.csv`、`clean-results.csv`、`versions.csv`（含 XPath、
+正则、默认填充值、分隔符、脱敏各组件版本）、`conflicts.csv`、`checksums.json`。
+
+版本格式为 `<作用域>.<组件>@V<n>`，例如 `PARS-0002.价格.XPATH@V2`、
+`DATA-0003.REGEX@V1`。修改字段或规则时只递增变化组件的版本，并让模板/规则版本同步递增。
+
+回归测试：
+
+```bash
+cd backend && .venv/bin/python tests/test_cleaning_batches.py
+```

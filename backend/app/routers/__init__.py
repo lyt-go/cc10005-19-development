@@ -24,5 +24,7 @@ from app.routers import cookiejar as router_cookiejar
 from app.routers import healthcheck as router_healthcheck
 from app.routers import snapshot as router_snapshot
 from app.routers import audittrail as router_audittrail
+from app.routers import cleaning as router_cleaning
+from app.routers import delivery as router_delivery
 
-ROUTERS = [router_connector, router_proxypool, router_deepcrawl, router_jsrender, router_parser, router_dataclean, router_formatter, router_dedupengine, router_throttle, router_captcha, router_monitor, router_exporttask, router_seedmgr, router_sitemap, router_cookiejar, router_healthcheck, router_snapshot, router_audittrail]
+ROUTERS = [router_connector, router_proxypool, router_deepcrawl, router_jsrender, router_parser, router_dataclean, router_formatter, router_dedupengine, router_throttle, router_captcha, router_monitor, router_exporttask, router_seedmgr, router_sitemap, router_cookiejar, router_healthcheck, router_snapshot, router_audittrail, router_cleaning, router_delivery]
